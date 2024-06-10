@@ -1,19 +1,32 @@
 import { xlsxToCsv } from '@/app/converter/xlsx-csv';
-import { uploadToRepo } from '@/app/git/utils';
+import { uploadFileToRepo } from '@/app/git/utils';
 import { Octokit } from '@octokit/rest';
 import { NextResponse } from 'next/server';
+
+interface ReqBodyType {
+  buffer: string;
+  semester: string;
+  year: number;
+}
 
 export async function POST(req: Request) {
   try {
     const octo = new Octokit({
       auth: process.env.PERSONAL_ACCESS_TOKEN,
     });
-    const body = await req.json();
+    const body: ReqBodyType = await req.json();
     const xlsxBuffer = Buffer.from(body.buffer, 'base64');
     const csvBuffer = await xlsxToCsv(xlsxBuffer);
-    await uploadToRepo(octo, csvBuffer, "test file.csv", "fall2023", {
-      organization: process.env.REPO_ORGANIZATION!,
-      repo: process.env.REPO_REPO!,
+    const fileNameWithoutExtension = [body.semester, body.year.toString()].join(" ");
+    const branchName = [body.semester, body.year.toString()].join("");
+    await uploadFileToRepo(octo, {
+        organization: process.env.REPO_ORGANIZATION!,
+        repo: process.env.REPO_REPO!,
+    }, {
+      commitMessage: `feat: added grade distribution for ${body.semester} ${body.year}`,
+      fileBuf: csvBuffer,
+      filePath: `raw_data/${fileNameWithoutExtension}.csv`, 
+      branchName
     })
     return NextResponse.json({ msg: "File added successfully" }, { status: 200 });
   } catch (error) {

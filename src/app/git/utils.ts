@@ -5,6 +5,13 @@ interface RepoInfo {
   repo: string;
 }
 
+interface CommitConfig {
+  filePath: string;
+  fileBuf: Buffer;
+  branchName: string;
+  commitMessage: string;
+}
+
 async function getCurrentCommit(octo: Octokit, repoInfo: RepoInfo, branchName: string) {
   const { data: refData } = await octo.git.getRef({
     owner: repoInfo.organization,
@@ -59,28 +66,27 @@ async function createNewTree(octo: Octokit, repoInfo: RepoInfo, blob: { sha: str
   });
   return data;
 }
-
-export async function uploadToRepo(octo: Octokit, fileBuf: Buffer, fileName: string, branchName: string, repoInfo: RepoInfo) {
-  await createBranchIfNotExists(octo, repoInfo, branchName);
-  const currentCommit = await getCurrentCommit(octo, repoInfo, branchName);
+export async function uploadFileToRepo(octo: Octokit, repoInfo: RepoInfo, commitConfig: CommitConfig) {
+  await createBranchIfNotExists(octo, repoInfo, commitConfig.branchName);
+  const currentCommit = await getCurrentCommit(octo, repoInfo, commitConfig.branchName);
   const fileGitBlob = await octo.git.createBlob({
     owner: repoInfo.organization,
     repo: repoInfo.repo,
-    content: fileBuf.toString(),
+    content: commitConfig.fileBuf.toString(),
     encoding: 'utf-8'
   })
-  const newTree = await createNewTree(octo, repoInfo, fileGitBlob.data, `raw_data/${fileName}`, currentCommit.treeSha);
+  const newTree = await createNewTree(octo, repoInfo, fileGitBlob.data, commitConfig.filePath, currentCommit.treeSha);
   const newCommit = await octo.git.createCommit({
     owner: repoInfo.organization,
     repo: repoInfo.repo,
-    message: "test upload file",
+    message: commitConfig.commitMessage,
     tree: newTree.sha,
     parents: [currentCommit.commitSha]
   });
   await octo.git.updateRef({
     owner: repoInfo.organization,
     repo: repoInfo.repo,
-    ref: `heads/${branchName}`,
+    ref: `heads/${commitConfig.branchName}`,
     sha: newCommit.data.sha
   })
 }
